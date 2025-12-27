@@ -8,6 +8,7 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
         :root {
             --bg-gradient-start: #1a1a1a;
@@ -120,6 +121,14 @@
         body.light-mode .input-glass:focus {
             background: rgba(255, 255, 255, 1);
             border: 1px solid rgba(251, 146, 60, 0.5);
+        }
+
+        .input-glass.invalid {
+            border: 1px solid rgba(239, 68, 68, 0.5);
+        }
+
+        .input-glass.valid {
+            border: 1px solid rgba(34, 197, 94, 0.5);
         }
         
         .btn-glass {
@@ -251,6 +260,41 @@
         #qrcode canvas {
             border-radius: 12px;
         }
+
+        .tooltip {
+            position: relative;
+        }
+
+        .tooltip:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 8px 12px;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            border-radius: 8px;
+            font-size: 12px;
+            white-space: nowrap;
+            z-index: 1000;
+            margin-bottom: 5px;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .slide-in {
+            animation: slideIn 0.3s ease-out;
+        }
     </style>
 </head>
 <body>
@@ -268,23 +312,93 @@
             <div id="qrcode" class="flex justify-center mb-4"></div>
             <p id="qrAddress" class="text-sm font-mono text-secondary text-center break-all"></p>
         </div>
+    </div>
+
+    <!-- Analytics Modal -->
+    <div id="analyticsModal" class="modal">
+        <div class="glass-card rounded-3xl p-8 max-w-4xl mx-4 max-h-[90vh] overflow-y-auto scrollbar-glass">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-2xl font-bold text-primary">Transaction Analytics</h3>
+                <button onclick="closeAnalyticsModal()" class="glass p-2 rounded-xl hover:bg-white/10 transition-all">
+                    <i data-lucide="x" class="w-5 h-5 text-secondary"></i>
+                </button>
+            </div>
+            <div id="analyticsContent"></div>
+        </div>
     </div><script>
-        const { Search, Wallet, ArrowUpRight, ArrowDownLeft, TrendingUp, X, GitCompare, Bitcoin, Download, QrCode, Sun, Moon, DollarSign, Euro, Filter } = lucide;
+        const { Search, Wallet, ArrowUpRight, ArrowDownLeft, TrendingUp, X, GitCompare, Bitcoin, Download, QrCode, Sun, Moon, DollarSign, Euro, Filter, BarChart3, Share2, FileText, PieChart } = lucide;
         
+        // Price cache for performance
+        let priceCache = { data: null, timestamp: 0 };
+        const CACHE_DURATION = 60000; // 1 minute
+
         let state = {
             addresses: [],
             currentInput: '',
             loading: false,
             error: '',
             compareMode: false,
+            portfolioMode: false,
             theme: 'dark',
             currency: 'USD',
             btcPrice: { USD: 0, EUR: 0 },
             searchTerm: '',
-            chartInstances: {}
+            chartInstances: {},
+            validationState: null
         };
 
+        // Load URL parameters on init
+        function loadURLParams() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const addressParam = urlParams.get('address');
+            if (addressParam) {
+                state.currentInput = addressParam;
+                setTimeout(() => addAddress(), 500);
+            }
+        }
+
+        // Debounce function for performance
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        // Bitcoin address validation
+        function validateBitcoinAddress(address) {
+            const patterns = {
+                p2pkh: /^[1][a-km-zA-HJ-NP-Z1-9]{25,34}$/,
+                p2sh: /^[3][a-km-zA-HJ-NP-Z1-9]{25,34}$/,
+                bech32: /^(bc1)[a-z0-9]{39,87}$/,
+                taproot: /^(bc1p)[a-z0-9]{58}$/
+            };
+            
+            return Object.values(patterns).some(pattern => pattern.test(address.trim()));
+        }
+
+        // Validate input in real-time
+        function validateInput(address) {
+            if (!address) {
+                state.validationState = null;
+                return;
+            }
+            state.validationState = validateBitcoinAddress(address) ? 'valid' : 'invalid';
+        }
+
+        // Optimized BTC price fetching with cache
         async function fetchBTCPrice() {
+            const now = Date.now();
+            if (priceCache.data && (now - priceCache.timestamp) < CACHE_DURATION) {
+                state.btcPrice = priceCache.data;
+                return;
+            }
+            
             try {
                 const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd,eur');
                 const data = await response.json();
@@ -292,6 +406,7 @@
                     USD: data.bitcoin.usd,
                     EUR: data.bitcoin.eur
                 };
+                priceCache = { data: state.btcPrice, timestamp: now };
             } catch (err) {
                 console.error('Failed to fetch BTC price:', err);
             }
@@ -357,7 +472,19 @@
                 return;
             }
 
-            if (state.addresses.length >= 2) {
+            if (!validateBitcoinAddress(state.currentInput)) {
+                state.error = 'Invalid Bitcoin address format';
+                render();
+                return;
+            }
+
+            if (state.addresses.length >= 10 && state.portfolioMode) {
+                state.error = 'Maximum 10 addresses in portfolio mode';
+                render();
+                return;
+            }
+
+            if (state.addresses.length >= 2 && !state.portfolioMode) {
                 state.error = 'Maximum 2 addresses for comparison';
                 render();
                 return;
@@ -371,6 +498,7 @@
                 const walletData = await fetchWalletData(state.currentInput);
                 state.addresses.push(walletData);
                 state.currentInput = '';
+                state.validationState = null;
                 setTimeout(() => createChart(state.addresses.length - 1), 100);
             } catch (err) {
                 state.error = `Error: ${err.message}. Please check the address and try again.`;
@@ -401,18 +529,31 @@
 
         function toggleCompareMode() {
             state.compareMode = !state.compareMode;
+            state.portfolioMode = false;
             if (!state.compareMode) {
                 state.addresses = state.addresses.slice(0, 1);
             }
             render();
         }
 
+        function togglePortfolioMode() {
+            state.portfolioMode = !state.portfolioMode;
+            state.compareMode = false;
+            render();
+        }
+
+        // FIXED: Theme toggle with proper chart recreation
         function toggleTheme() {
             state.theme = state.theme === 'dark' ? 'light' : 'dark';
             document.body.classList.toggle('light-mode');
-            Object.keys(state.chartInstances).forEach(idx => {
-                createChart(parseInt(idx));
-            });
+            
+            // Delay chart recreation to ensure theme is applied
+            setTimeout(() => {
+                Object.keys(state.chartInstances).forEach(idx => {
+                    createChart(parseInt(idx));
+                });
+            }, 50);
+            
             render();
         }
 
@@ -448,6 +589,170 @@
             window.URL.revokeObjectURL(url);
         }
 
+        // Export to PDF
+        // Export individual wallet to PDF report
+        function exportWalletToPDF(walletIdx) {
+            const wallet = state.addresses[walletIdx];
+            const analytics = calculateAnalytics(wallet);
+            
+            // Create clean PDF content
+            const pdfContent = document.createElement('div');
+            pdfContent.style.cssText = 'padding: 40px; font-family: Arial, sans-serif; background: white; color: black;';
+            
+            pdfContent.innerHTML = `
+                <div style="margin-bottom: 30px; border-bottom: 3px solid #fb923c; padding-bottom: 20px;">
+                    <h1 style="color: #1a1a1a; font-size: 32px; margin: 0 0 10px 0;">Lazare Bitcoin Wallet Report</h1>
+                    <p style="color: #666; margin: 0; font-size: 14px;">Generated on ${new Date().toLocaleString()}</p>
+                </div>
+
+                <div style="margin-bottom: 30px; background: #f5f5f5; padding: 20px; border-radius: 10px;">
+                    <h2 style="color: #1a1a1a; font-size: 18px; margin: 0 0 15px 0;">Wallet Address</h2>
+                    <p style="font-family: monospace; color: #333; font-size: 12px; word-break: break-all; margin: 0;">${wallet.address}</p>
+                </div>
+
+                <div style="margin-bottom: 30px;">
+                    <h2 style="color: #1a1a1a; font-size: 20px; margin: 0 0 20px 0;">Balance Summary</h2>
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tr style="background: #f5f5f5;">
+                            <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Current Balance</td>
+                            <td style="padding: 12px; border: 1px solid #ddd; text-align: right;">${formatBTC(wallet.balance)} BTC</td>
+                            <td style="padding: 12px; border: 1px solid #ddd; text-align: right;">${formatFiat(wallet.balance)}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Total Received</td>
+                            <td style="padding: 12px; border: 1px solid #ddd; text-align: right; color: green;">${formatBTC(wallet.totalReceived)} BTC</td>
+                            <td style="padding: 12px; border: 1px solid #ddd; text-align: right;">${formatFiat(wallet.totalReceived)}</td>
+                        </tr>
+                        <tr style="background: #f5f5f5;">
+                            <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Total Sent</td>
+                            <td style="padding: 12px; border: 1px solid #ddd; text-align: right; color: red;">${formatBTC(wallet.totalSent)} BTC</td>
+                            <td style="padding: 12px; border: 1px solid #ddd; text-align: right;">${formatFiat(wallet.totalSent)}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Total Transactions</td>
+                            <td style="padding: 12px; border: 1px solid #ddd; text-align: right;" colspan="2">${wallet.txCount}</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <div style="margin-bottom: 30px;">
+                    <h2 style="color: #1a1a1a; font-size: 20px; margin: 0 0 20px 0;">Analytics</h2>
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tr style="background: #f5f5f5;">
+                            <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Average Received</td>
+                            <td style="padding: 12px; border: 1px solid #ddd; text-align: right;">${formatBTC(analytics.avgReceived)} BTC</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Average Sent</td>
+                            <td style="padding: 12px; border: 1px solid #ddd; text-align: right;">${formatBTC(analytics.avgSent)} BTC</td>
+                        </tr>
+                        <tr style="background: #f5f5f5;">
+                            <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Largest Received</td>
+                            <td style="padding: 12px; border: 1px solid #ddd; text-align: right; color: green;">${formatBTC(analytics.largestReceived)} BTC</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Largest Sent</td>
+                            <td style="padding: 12px; border: 1px solid #ddd; text-align: right; color: red;">${formatBTC(analytics.largestSent)} BTC</td>
+                        </tr>
+                        <tr style="background: #f5f5f5;">
+                            <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">Most Active Day</td>
+                            <td style="padding: 12px; border: 1px solid #ddd; text-align: right;">${analytics.mostActiveDay}</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <div style="margin-bottom: 30px;">
+                    <h2 style="color: #1a1a1a; font-size: 20px; margin: 0 0 20px 0;">Recent Transactions (Last 20)</h2>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+                        <thead>
+                            <tr style="background: #fb923c; color: white;">
+                                <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Type</th>
+                                <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Transaction ID</th>
+                                <th style="padding: 10px; border: 1px solid #ddd; text-align: right;">Amount (BTC)</th>
+                                <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Date</th>
+                                <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${wallet.transactions.slice(0, 20).map((tx, idx) => {
+                                const isReceived = tx.vout.some(v => v.scriptpubkey_address === wallet.address);
+                                const amount = isReceived
+                                    ? tx.vout.reduce((sum, v) => v.scriptpubkey_address === wallet.address ? sum + v.value : sum, 0)
+                                    : tx.vin.reduce((sum, v) => v.prevout?.scriptpubkey_address === wallet.address ? sum + v.prevout.value : sum, 0);
+                                
+                                return `
+                                    <tr style="background: ${idx % 2 === 0 ? '#f5f5f5' : 'white'};">
+                                        <td style="padding: 8px; border: 1px solid #ddd; color: ${isReceived ? 'green' : 'red'}; font-weight: bold;">
+                                            ${isReceived ? '↓ Received' : '↑ Sent'}
+                                        </td>
+                                        <td style="padding: 8px; border: 1px solid #ddd; font-family: monospace; font-size: 9px;">
+                                            ${tx.txid.slice(0, 16)}...${tx.txid.slice(-8)}
+                                        </td>
+                                        <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-weight: bold;">
+                                            ${formatBTC(amount)}
+                                        </td>
+                                        <td style="padding: 8px; border: 1px solid #ddd;">
+                                            ${tx.status.confirmed ? formatDate(tx.status.block_time) : 'Unconfirmed'}
+                                        </td>
+                                        <td style="padding: 8px; border: 1px solid #ddd;">
+                                            ${tx.status.confirmed ? `Block ${tx.status.block_height}` : 'Pending'}
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; text-align: center; color: #999; font-size: 12px;">
+                    <p style="margin: 0;">Generated by Lazare Bitcoin Address Tracker</p>
+                    <p style="margin: 5px 0 0 0;">Data provided by Mempool.space</p>
+                </div>
+            `;
+            
+            // Generate PDF
+            const opt = {
+                margin: 0.5,
+                filename: `lazare-wallet-${wallet.address.slice(0, 8)}-${Date.now()}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2 },
+                jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+            };
+            
+            html2pdf().set(opt).from(pdfContent).save();
+        }
+        // Share link functionality
+        function shareWallet(address) {
+    const baseURL = window.location.origin + window.location.pathname;
+    const shareURL = `${baseURL}?address=${encodeURIComponent(address)}`;
+    
+    if (navigator.share) {
+        navigator.share({
+            title: 'Lazare Bitcoin Tracker',
+            text: `Check out this Bitcoin wallet`,
+            url: shareURL
+        });
+    } else {
+        // Copy only the URL, not the text
+        navigator.clipboard.writeText(shareURL).then(() => {
+            // Show a better notification
+            const notification = document.createElement('div');
+            notification.className = 'fixed top-4 right-4 glass-card px-6 py-4 rounded-xl shadow-2xl z-50 slide-in';
+            notification.innerHTML = `
+                <div class="flex items-center gap-3">
+                    <i data-lucide="check-circle" class="w-5 h-5 text-green-400"></i>
+                    <p class="text-primary font-medium">Share link copied!</p>
+                </div>
+            `;
+            document.body.appendChild(notification);
+            lucide.createIcons();
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        });
+    }
+}
+
         function showQRCode(address) {
             const modal = document.getElementById('qrModal');
             const qrDiv = document.getElementById('qrcode');
@@ -472,10 +777,19 @@
             document.getElementById('qrModal').classList.remove('active');
         }
 
+        function closeAnalyticsModal() {
+            document.getElementById('analyticsModal').classList.remove('active');
+        }
+
         function filterTransactions(walletIdx, term) {
             state.searchTerm = term;
             render();
         }
+
+        // Debounced filter for performance
+        const debouncedFilter = debounce((idx, term) => {
+            filterTransactions(idx, term);
+        }, 300);
 
         function getFilteredTransactions(wallet) {
             if (!state.searchTerm) return wallet.transactions.slice(0, 10);
@@ -484,6 +798,218 @@
                 tx.txid.toLowerCase().includes(state.searchTerm.toLowerCase()) ||
                 formatDate(tx.status.block_time).toLowerCase().includes(state.searchTerm.toLowerCase())
             ).slice(0, 10);
+        }// Transaction Analytics
+        function calculateAnalytics(wallet) {
+            const txs = wallet.transactions;
+            
+            // Separate received and sent transactions
+            const received = txs.filter(tx => tx.vout.some(v => v.scriptpubkey_address === wallet.address));
+            const sent = txs.filter(tx => tx.vin.some(v => v.prevout?.scriptpubkey_address === wallet.address));
+            
+            // Calculate average amounts
+            const avgReceived = received.length > 0 
+                ? received.reduce((sum, tx) => {
+                    return sum + tx.vout.reduce((s, v) => v.scriptpubkey_address === wallet.address ? s + v.value : s, 0);
+                }, 0) / received.length 
+                : 0;
+            
+            const avgSent = sent.length > 0 
+                ? sent.reduce((sum, tx) => {
+                    return sum + tx.vin.reduce((s, v) => v.prevout?.scriptpubkey_address === wallet.address ? s + v.prevout.value : s, 0);
+                }, 0) / sent.length 
+                : 0;
+            
+            // Calculate largest transactions
+            const largestReceived = received.length > 0 
+                ? Math.max(...received.map(tx => tx.vout.reduce((s, v) => v.scriptpubkey_address === wallet.address ? s + v.value : s, 0)))
+                : 0;
+            
+            const largestSent = sent.length > 0 
+                ? Math.max(...sent.map(tx => tx.vin.reduce((s, v) => v.prevout?.scriptpubkey_address === wallet.address ? s + v.prevout.value : s, 0)))
+                : 0;
+            
+            // Time-based analysis
+            const monthlyData = {};
+            txs.filter(tx => tx.status.confirmed).forEach(tx => {
+                const date = new Date(tx.status.block_time * 1000);
+                const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                
+                if (!monthlyData[monthKey]) {
+                    monthlyData[monthKey] = { received: 0, sent: 0, count: 0 };
+                }
+                
+                const isReceived = tx.vout.some(v => v.scriptpubkey_address === wallet.address);
+                const amount = isReceived
+                    ? tx.vout.reduce((s, v) => v.scriptpubkey_address === wallet.address ? s + v.value : s, 0)
+                    : tx.vin.reduce((s, v) => v.prevout?.scriptpubkey_address === wallet.address ? s + v.prevout.value : s, 0);
+                
+                if (isReceived) {
+                    monthlyData[monthKey].received += amount;
+                } else {
+                    monthlyData[monthKey].sent += amount;
+                }
+                monthlyData[monthKey].count++;
+            });
+            
+            // Most active day of week
+            const dayCount = [0, 0, 0, 0, 0, 0, 0];
+            txs.filter(tx => tx.status.confirmed).forEach(tx => {
+                const day = new Date(tx.status.block_time * 1000).getDay();
+                dayCount[day]++;
+            });
+            const mostActiveDay = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayCount.indexOf(Math.max(...dayCount))];
+            
+            return {
+                totalTransactions: txs.length,
+                receivedCount: received.length,
+                sentCount: sent.length,
+                avgReceived,
+                avgSent,
+                largestReceived,
+                largestSent,
+                monthlyData,
+                mostActiveDay,
+                firstTransaction: txs.length > 0 ? txs[txs.length - 1].status.block_time : null,
+                lastTransaction: txs.length > 0 ? txs[0].status.block_time : null
+            };
+        }
+
+        function showAnalytics(walletIdx) {
+            const wallet = state.addresses[walletIdx];
+            const analytics = calculateAnalytics(wallet);
+            const modal = document.getElementById('analyticsModal');
+            const content = document.getElementById('analyticsContent');
+            
+            const monthlyKeys = Object.keys(analytics.monthlyData).sort().slice(-6);
+            
+            content.innerHTML = `
+                <div class="space-y-6">
+                    <!-- Overview Stats -->
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="glass rounded-xl p-4">
+                            <p class="text-tertiary text-xs mb-1">Total Transactions</p>
+                            <p class="text-primary text-2xl font-bold">${analytics.totalTransactions}</p>
+                        </div>
+                        <div class="glass rounded-xl p-4">
+                            <p class="text-tertiary text-xs mb-1">Received</p>
+                            <p class="text-green-400 text-2xl font-bold">${analytics.receivedCount}</p>
+                        </div>
+                        <div class="glass rounded-xl p-4">
+                            <p class="text-tertiary text-xs mb-1">Sent</p>
+                            <p class="text-red-400 text-2xl font-bold">${analytics.sentCount}</p>
+                        </div>
+                        <div class="glass rounded-xl p-4">
+                            <p class="text-tertiary text-xs mb-1">Most Active</p>
+                            <p class="text-primary text-lg font-bold">${analytics.mostActiveDay}</p>
+                        </div>
+                    </div>
+
+                    <!-- Average Amounts -->
+                    <div class="glass rounded-xl p-6">
+                        <h4 class="text-primary font-bold mb-4">Average Transaction Amounts</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <p class="text-secondary text-sm mb-2">Average Received</p>
+                                <p class="text-green-400 text-xl font-bold">${formatBTC(analytics.avgReceived)} BTC</p>
+                                <p class="text-tertiary text-xs">${formatFiat(analytics.avgReceived)}</p>
+                            </div>
+                            <div>
+                                <p class="text-secondary text-sm mb-2">Average Sent</p>
+                                <p class="text-red-400 text-xl font-bold">${formatBTC(analytics.avgSent)} BTC</p>
+                                <p class="text-tertiary text-xs">${formatFiat(analytics.avgSent)}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Largest Transactions -->
+                    <div class="glass rounded-xl p-6">
+                        <h4 class="text-primary font-bold mb-4">Largest Transactions</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <p class="text-secondary text-sm mb-2">Largest Received</p>
+                                <p class="text-green-400 text-xl font-bold">${formatBTC(analytics.largestReceived)} BTC</p>
+                                <p class="text-tertiary text-xs">${formatFiat(analytics.largestReceived)}</p>
+                            </div>
+                            <div>
+                                <p class="text-secondary text-sm mb-2">Largest Sent</p>
+                                <p class="text-red-400 text-xl font-bold">${formatBTC(analytics.largestSent)} BTC</p>
+                                <p class="text-tertiary text-xs">${formatFiat(analytics.largestSent)}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Monthly Activity -->
+                    <div class="glass rounded-xl p-6">
+                        <h4 class="text-primary font-bold mb-4">Monthly Activity (Last 6 Months)</h4>
+                        <div class="space-y-3">
+                            ${monthlyKeys.map(month => {
+                                const data = analytics.monthlyData[month];
+                                const total = data.received + data.sent;
+                                const receivedPct = total > 0 ? (data.received / total) * 100 : 0;
+                                
+                                return `
+                                    <div>
+                                        <div class="flex justify-between text-sm mb-1">
+                                            <span class="text-secondary">${month}</span>
+                                            <span class="text-primary font-bold">${data.count} txs</span>
+                                        </div>
+                                        <div class="flex h-6 rounded-lg overflow-hidden">
+                                            <div class="bg-green-500" style="width: ${receivedPct}%"></div>
+                                            <div class="bg-red-500" style="width: ${100 - receivedPct}%"></div>
+                                        </div>
+                                        <div class="flex justify-between text-xs mt-1">
+                                            <span class="text-green-400">↓ ${formatBTC(data.received)}</span>
+                                            <span class="text-red-400">↑ ${formatBTC(data.sent)}</span>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+
+                    <!-- Timeline -->
+                    <div class="glass rounded-xl p-6">
+                        <h4 class="text-primary font-bold mb-4">Wallet Timeline</h4>
+                        <div class="space-y-2">
+                            <div class="flex justify-between">
+                                <span class="text-secondary text-sm">First Transaction</span>
+                                <span class="text-primary font-medium">${analytics.firstTransaction ? formatDate(analytics.firstTransaction) : 'N/A'}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-secondary text-sm">Latest Transaction</span>
+                                <span class="text-primary font-medium">${analytics.lastTransaction ? formatDate(analytics.lastTransaction) : 'N/A'}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-secondary text-sm">Wallet Age</span>
+                                <span class="text-primary font-medium">
+                                    ${analytics.firstTransaction ? Math.floor((Date.now() / 1000 - analytics.firstTransaction) / 86400) : 0} days
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            modal.classList.add('active');
+            lucide.createIcons();
+        }
+
+        // Portfolio calculations
+        function getPortfolioStats() {
+            if (state.addresses.length === 0) return null;
+            
+            const totalBalance = state.addresses.reduce((sum, w) => sum + w.balance, 0);
+            const totalReceived = state.addresses.reduce((sum, w) => sum + w.totalReceived, 0);
+            const totalSent = state.addresses.reduce((sum, w) => sum + w.totalSent, 0);
+            const totalTxCount = state.addresses.reduce((sum, w) => sum + w.txCount, 0);
+            
+            return {
+                totalBalance,
+                totalReceived,
+                totalSent,
+                totalTxCount,
+                walletCount: state.addresses.length
+            };
         }
 
         function createChart(walletIdx) {
@@ -568,54 +1094,96 @@
                     }
                 }
             });
-        }
-        function render() {
+        }function render() {
             const root = document.getElementById('root');
+            const portfolioStats = state.portfolioMode ? getPortfolioStats() : null;
             
             root.innerHTML = `
                 <div class="min-h-screen p-4 md:p-8 lg:p-12">
                     <div class="max-w-7xl mx-auto">
                         <!-- Header -->
-                        <div class="text-center mb-16 pt-12 animate-float">
-                            <div class="flex justify-end mb-4">
-                                <button onclick="toggleTheme()" class="btn-glass p-3 rounded-xl mr-3">
-                                    <i data-lucide="${state.theme === 'dark' ? 'sun' : 'moon'}" class="w-5 h-5 text-secondary"></i>
-                                </button>
-                                <button onclick="toggleCurrency()" class="btn-glass px-4 py-3 rounded-xl flex items-center gap-2">
-                                    <i data-lucide="${state.currency === 'USD' ? 'dollar-sign' : 'euro'}" class="w-5 h-5 text-secondary"></i>
-                                    <span class="text-secondary font-medium">${state.currency}</span>
-                                </button>
+                        <div class="text-center mb-12 pt-8 animate-float">
+                            <div class="flex justify-between items-start mb-4">
+                                <div></div>
+                                <div class="flex gap-2">
+                                    <button onclick="toggleTheme()" class="btn-glass p-3 rounded-xl tooltip" data-tooltip="Toggle Theme">
+                                        <i data-lucide="${state.theme === 'dark' ? 'sun' : 'moon'}" class="w-5 h-5 text-secondary"></i>
+                                    </button>
+                                    <button onclick="toggleCurrency()" class="btn-glass px-4 py-3 rounded-xl flex items-center gap-2">
+                                        <i data-lucide="${state.currency === 'USD' ? 'dollar-sign' : 'euro'}" class="w-5 h-5 text-secondary"></i>
+                                        <span class="text-secondary font-medium">${state.currency}</span>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="inline-flex items-center gap-5 mb-8">
+                            <div class="inline-flex items-center gap-5 mb-6">
                                 <div class="glass-card p-5 rounded-3xl glow-orange">
                                     <i data-lucide="wallet" class="w-12 h-12 text-orange-500"></i>
                                 </div>
                                 <div class="text-left">
-                                    <h1 class="text-6xl md:text-7xl font-bold text-primary tracking-tight text-shadow mb-2">
+                                    <h1 class="text-5xl md:text-6xl font-bold text-primary tracking-tight text-shadow mb-2">
                                         Lazare
                                     </h1>
                                     <p class="text-orange-500 text-sm font-semibold tracking-widest uppercase">Bitcoin Address Tracker</p>
                                 </div>
                             </div>
-                            <p class="text-secondary text-lg font-light max-w-2xl mx-auto leading-relaxed">
-                                Track and analyze Bitcoin wallet addresses with real-time data. 
-                                Compare multiple addresses to gain deeper insights.
+                            <p class="text-secondary text-base font-light max-w-2xl mx-auto leading-relaxed">
+                                Track and analyze Bitcoin wallet addresses with real-time data and advanced analytics
                             </p>
                         </div>
 
-                        <!-- Compare Toggle -->
-                        <div class="flex justify-center mb-10">
+                        <!-- Mode Toggles -->
+                        <div class="flex justify-center gap-4 mb-8">
                             <button
                                 id="compareToggle"
-                                class="btn-glass inline-flex items-center gap-3 px-10 py-5 rounded-2xl text-primary font-medium text-base"
+                                class="btn-glass inline-flex items-center gap-3 px-8 py-4 rounded-2xl text-primary font-medium text-sm ${state.compareMode ? 'bg-orange-500/20 border-orange-500/50' : ''}"
                             >
                                 <i data-lucide="git-compare" class="w-5 h-5"></i>
-                                <span>${state.compareMode ? 'Exit Compare Mode' : 'Compare Addresses'}</span>
+                                <span>${state.compareMode ? 'Exit Compare' : 'Compare'}</span>
+                            </button>
+                            <button
+                                id="portfolioToggle"
+                                class="btn-glass inline-flex items-center gap-3 px-8 py-4 rounded-2xl text-primary font-medium text-sm ${state.portfolioMode ? 'bg-orange-500/20 border-orange-500/50' : ''}"
+                            >
+                                <i data-lucide="pie-chart" class="w-5 h-5"></i>
+                                <span>${state.portfolioMode ? 'Exit Portfolio' : 'Portfolio'}</span>
                             </button>
                         </div>
 
+                        <!-- Portfolio Summary -->
+                        ${state.portfolioMode && portfolioStats ? `
+                            <div class="glass-card rounded-3xl p-6 mb-8 slide-in">
+                                <div class="flex items-center gap-3 mb-6">
+                                    <i data-lucide="pie-chart" class="w-6 h-6 text-orange-500"></i>
+                                    <h2 class="text-2xl font-bold text-primary">Portfolio Overview</h2>
+                                </div>
+                                <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                                    <div class="glass rounded-xl p-4">
+                                        <p class="text-tertiary text-xs mb-1">Wallets</p>
+                                        <p class="text-primary text-2xl font-bold">${portfolioStats.walletCount}</p>
+                                    </div>
+                                    <div class="glass rounded-xl p-4">
+                                        <p class="text-tertiary text-xs mb-1">Total Balance</p>
+                                        <p class="text-orange-500 text-xl font-bold">${formatBTC(portfolioStats.totalBalance)}</p>
+                                        <p class="text-tertiary text-xs">${formatFiat(portfolioStats.totalBalance)}</p>
+                                    </div>
+                                    <div class="glass rounded-xl p-4">
+                                        <p class="text-tertiary text-xs mb-1">Total Received</p>
+                                        <p class="text-green-400 text-xl font-bold">${formatBTC(portfolioStats.totalReceived)}</p>
+                                    </div>
+                                    <div class="glass rounded-xl p-4">
+                                        <p class="text-tertiary text-xs mb-1">Total Sent</p>
+                                        <p class="text-red-400 text-xl font-bold">${formatBTC(portfolioStats.totalSent)}</p>
+                                    </div>
+                                    <div class="glass rounded-xl p-4">
+                                        <p class="text-tertiary text-xs mb-1">Transactions</p>
+                                        <p class="text-primary text-2xl font-bold">${portfolioStats.totalTxCount}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        ` : ''}
+
                         <!-- Search Bar -->
-                        <div class="mb-16 max-w-4xl mx-auto">
+                        <div class="mb-12 max-w-4xl mx-auto">
                             <div class="glass-card rounded-3xl p-3 shadow-2xl">
                                 <div class="flex flex-col md:flex-row items-stretch md:items-center gap-3 px-4">
                                     <div class="flex items-center gap-4 flex-1">
@@ -625,176 +1193,194 @@
                                             id="addressInput"
                                             value="${state.currentInput}"
                                             placeholder="Enter Bitcoin address to track..."
-                                            class="flex-1 input-glass border-none outline-none text-primary py-5 text-base rounded-xl px-6 transition-all"
+                                            class="flex-1 input-glass border-none outline-none text-primary py-5 text-base rounded-xl px-6 transition-all ${state.validationState === 'valid' ? 'valid' : state.validationState === 'invalid' ? 'invalid' : ''}"
                                         />
+                                        ${state.validationState ? `
+                                            <i data-lucide="${state.validationState === 'valid' ? 'check-circle' : 'x-circle'}" 
+                                               class="w-5 h-5 ${state.validationState === 'valid' ? 'text-green-500' : 'text-red-500'}"></i>
+                                        ` : ''}
                                     </div>
                                     <button
                                         id="addBtn"
                                         ${state.loading ? 'disabled' : ''}
                                         class="btn-orange px-10 py-5 text-white rounded-xl font-bold text-base disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
-                                        ${state.loading ? 'Loading...' : state.addresses.length > 0 ? '+ Add Address' : 'Track Address'}
+                                        ${state.loading ? 'Loading...' : state.addresses.length > 0 ? '+ Add' : 'Track'}
                                     </button>
                                 </div>
                             </div>
-                            ${state.error ? `<p class="text-orange-400 text-sm mt-5 text-center font-medium">${state.error}</p>` : ''}
-                            ${state.compareMode ? `<p class="text-tertiary text-sm mt-4 text-center">Compare mode is active • You can add up to 2 addresses</p>` : ''}
+                            ${state.error ? `<p class="text-red-400 text-sm mt-5 text-center font-medium">${state.error}</p>` : ''}
+                            ${state.compareMode ? `<p class="text-tertiary text-sm mt-4 text-center">Compare mode: Add up to 2 addresses</p>` : ''}
+                            ${state.portfolioMode ? `<p class="text-tertiary text-sm mt-4 text-center">Portfolio mode: Track up to 10 addresses</p>` : ''}
                         </div>
 
                         ${state.addresses.length > 0 ? `
                             <!-- Wallet Cards Container -->
-                            <div class="grid grid-cols-1 ${state.addresses.length > 1 ? 'lg:grid-cols-2' : ''} gap-10 mb-12">
+                            <div class="grid grid-cols-1 ${state.addresses.length > 1 && !state.portfolioMode ? 'lg:grid-cols-2' : state.portfolioMode ? 'md:grid-cols-2 lg:grid-cols-3' : ''} gap-8 mb-12">
                                 ${state.addresses.map((wallet, walletIdx) => `
-                                    <div class="glass-card rounded-3xl p-8 shadow-2xl">
+                                    <div class="glass-card rounded-3xl p-6 shadow-2xl slide-in">
                                         <!-- Wallet Header -->
-                                        <div class="flex items-start justify-between mb-10">
-                                            <div class="flex items-center gap-4">
-                                                <div class="glass p-3.5 rounded-2xl">
-                                                    <i data-lucide="wallet" class="w-7 h-7 text-orange-500"></i>
+                                        <div class="flex items-start justify-between mb-6">
+                                            <div class="flex items-center gap-3">
+                                                <div class="glass p-2.5 rounded-xl">
+                                                    <i data-lucide="wallet" class="w-6 h-6 text-orange-500"></i>
                                                 </div>
                                                 <div>
-                                                    <p class="text-xs text-tertiary mb-2 uppercase tracking-wider font-semibold">Wallet Address</p>
-                                                    <p class="text-sm font-mono text-secondary font-medium">${wallet.address.slice(0, 16)}...${wallet.address.slice(-12)}</p>
+                                                    <p class="text-xs text-tertiary mb-1 uppercase tracking-wider font-semibold">Wallet</p>
+                                                    <p class="text-xs font-mono text-secondary font-medium">${wallet.address.slice(0, 12)}...${wallet.address.slice(-8)}</p>
                                                 </div>
                                             </div>
                                             <div class="flex gap-2">
-                                                <button onclick="showQRCode('${wallet.address}')" class="glass p-3 rounded-xl hover:bg-white/10 transition-all" title="Show QR Code">
-                                                    <i data-lucide="qr-code" class="w-5 h-5 text-secondary"></i>
+                                                <button onclick="showAnalytics(${walletIdx})" class="glass p-2 rounded-lg hover:bg-white/10 transition-all tooltip" data-tooltip="Analytics" title="Analytics">
+                                                    <i data-lucide="bar-chart-3" class="w-4 h-4 text-secondary"></i>
                                                 </button>
-                                                <button onclick="exportToCSV(${walletIdx})" class="glass p-3 rounded-xl hover:bg-white/10 transition-all" title="Export CSV">
-                                                    <i data-lucide="download" class="w-5 h-5 text-secondary"></i>
+                                                <button onclick="shareWallet('${wallet.address}')" class="glass p-2 rounded-lg hover:bg-white/10 transition-all tooltip" data-tooltip="Share" title="Share">
+                                                    <i data-lucide="share-2" class="w-4 h-4 text-secondary"></i>
                                                 </button>
-                                                <button onclick="removeAddress(${walletIdx})" class="glass p-3 rounded-xl hover:bg-white/10 transition-all">
-                                                    <i data-lucide="x" class="w-5 h-5 text-secondary"></i>
+                                                <button onclick="showQRCode('${wallet.address}')" class="glass p-2 rounded-lg hover:bg-white/10 transition-all tooltip" data-tooltip="QR Code" title="QR Code">
+                                                    <i data-lucide="qr-code" class="w-4 h-4 text-secondary"></i>
+                                                </button>
+                                                <button onclick="exportToCSV(${walletIdx})" class="glass p-2 rounded-lg hover:bg-white/10 transition-all tooltip" data-tooltip="Export CSV" title="Export CSV">
+                                                    <i data-lucide="download" class="w-4 h-4 text-secondary"></i>
+                                                </button>
+                                                <button onclick="exportWalletToPDF(${walletIdx})" class="glass p-2 rounded-lg hover:bg-white/10 transition-all tooltip" data-tooltip="Export PDF" title="Export PDF">
+                                                    <i data-lucide="file-text" class="w-4 h-4 text-secondary"></i>
+                                                </button>
+                                                <button onclick="removeAddress(${walletIdx})" class="glass p-2 rounded-lg hover:bg-white/10 transition-all">
+                                                    <i data-lucide="x" class="w-4 h-4 text-secondary"></i>
                                                 </button>
                                             </div>
                                         </div>
 
-                                        <!-- Balance Card -->
-                                        <div class="glass-orange rounded-3xl p-8 mb-8 glow-orange">
-                                            <div class="flex items-center justify-between mb-6">
-                                                <div class="flex items-center gap-3">
-                                                    <div class="glass-light p-3 rounded-xl">
-                                                        <i data-lucide="bitcoin" class="w-6 h-6 text-orange-500"></i>
-                                                    </div>
-                                                    <span class="text-secondary text-sm font-bold tracking-wider uppercase">Total Balance</span>
+                                        <!-- Minimal Balance Card -->
+                                        <div class="glass-orange rounded-2xl p-5 mb-6 glow-orange">
+                                            <div class="flex items-center justify-between mb-3">
+                                                <span class="text-secondary text-xs font-bold uppercase tracking-wide">Balance</span>
+                                                <i data-lucide="bitcoin" class="w-5 h-5 text-orange-500"></i>
+                                            </div>
+                                            <p class="text-4xl font-bold text-primary mb-2">
+                                                ${formatBTC(wallet.balance)}
+                                            </p>
+                                            <div class="flex items-center justify-between">
+                                                <p class="text-secondary text-xs">${formatSatoshis(wallet.balance)} sats</p>
+                                                <p class="text-orange-400 text-sm font-bold">${formatFiat(wallet.balance)}</p>
+                                            </div>
+                                        </div>
+
+                                        ${!state.portfolioMode ? `
+                                            <!-- Historical Chart -->
+                                            <div class="glass rounded-xl p-5 mb-6">
+                                                <h3 class="text-xs font-bold text-secondary uppercase tracking-wide mb-3">Balance History</h3>
+                                                <div style="height: 200px;">
+                                                    <canvas id="chart-${walletIdx}"></canvas>
                                                 </div>
                                             </div>
-                                            <div class="mb-3">
-                                                <span class="text-6xl font-bold text-primary text-shadow">
-                                                    ${formatBTC(wallet.balance)}
-                                                </span>
-                                                <span class="text-2xl text-orange-500 font-bold ml-2">BTC</span>
-                                            </div>
-                                            <p class="text-secondary text-sm font-medium mb-2">${formatSatoshis(wallet.balance)} satoshis</p>
-                                            <p class="text-orange-400 text-xl font-bold">${formatFiat(wallet.balance)}</p>
-                                        </div>
-
-                                        <!-- Historical Chart -->
-                                        <div class="glass rounded-2xl p-6 mb-8">
-                                            <h3 class="text-sm font-bold text-secondary uppercase tracking-wide mb-4">Balance History</h3>
-                                            <div style="height: 250px;">
-                                                <canvas id="chart-${walletIdx}"></canvas>
-                                            </div>
-                                        </div>
+                                        ` : ''}
 
                                         <!-- Stats Grid -->
-                                        <div class="grid grid-cols-2 gap-5 mb-8">
+                                        <div class="grid grid-cols-2 gap-4 mb-6">
                                             <!-- Received -->
-                                            <div class="glass rounded-2xl p-6 hover:bg-white/5 transition-all">
-                                                <div class="flex items-center gap-3 mb-4">
-                                                    <div class="glass-light p-2.5 rounded-xl bg-green-500/10">
-                                                        <i data-lucide="arrow-down-left" class="w-5 h-5 text-green-400"></i>
+                                            <div class="glass rounded-xl p-4 hover:bg-white/5 transition-all">
+                                                <div class="flex items-center gap-2 mb-3">
+                                                    <div class="glass-light p-2 rounded-lg bg-green-500/10">
+                                                        <i data-lucide="arrow-down-left" class="w-4 h-4 text-green-400"></i>
                                                     </div>
-                                                    <span class="text-secondary text-xs font-bold uppercase tracking-wide">Received</span>
+                                                    <span class="text-secondary text-xs font-bold uppercase">Received</span>
                                                 </div>
-                                                <p class="text-3xl font-bold text-primary mb-2">
+                                                <p class="text-2xl font-bold text-primary mb-1">
                                                     ${formatBTC(wallet.totalReceived)}
                                                 </p>
                                                 <p class="text-tertiary text-xs mb-1">${formatSatoshis(wallet.totalReceived)} sats</p>
-                                                <p class="text-green-400 text-sm font-bold">${formatFiat(wallet.totalReceived)}</p>
+                                                <p class="text-green-400 text-xs font-bold">${formatFiat(wallet.totalReceived)}</p>
                                             </div>
 
                                             <!-- Sent -->
-                                            <div class="glass rounded-2xl p-6 hover:bg-white/5 transition-all">
-                                                <div class="flex items-center gap-3 mb-4">
-                                                    <div class="glass-light p-2.5 rounded-xl bg-red-500/10">
-                                                        <i data-lucide="arrow-up-right" class="w-5 h-5 text-red-400"></i>
+                                            <div class="glass rounded-xl p-4 hover:bg-white/5 transition-all">
+                                                <div class="flex items-center gap-2 mb-3">
+                                                    <div class="glass-light p-2 rounded-lg bg-red-500/10">
+                                                        <i data-lucide="arrow-up-right" class="w-4 h-4 text-red-400"></i>
                                                     </div>
-                                                    <span class="text-secondary text-xs font-bold uppercase tracking-wide">Sent</span>
+                                                    <span class="text-secondary text-xs font-bold uppercase">Sent</span>
                                                 </div>
-                                                <p class="text-3xl font-bold text-primary mb-2">
+                                                <p class="text-2xl font-bold text-primary mb-1">
                                                     ${formatBTC(wallet.totalSent)}
                                                 </p>
                                                 <p class="text-tertiary text-xs mb-1">${formatSatoshis(wallet.totalSent)} sats</p>
-                                                <p class="text-red-400 text-sm font-bold">${formatFiat(wallet.totalSent)}</p>
+                                                <p class="text-red-400 text-xs font-bold">${formatFiat(wallet.totalSent)}</p>
                                             </div>
-                                        </div>
-                                        <!-- Transactions -->
-                                        <div class="glass rounded-2xl p-6">
-                                            <div class="flex items-center justify-between mb-6">
-                                                <div class="flex items-center gap-3">
-                                                    <i data-lucide="trending-up" class="w-5 h-5 text-secondary"></i>
-                                                    <h3 class="text-base font-bold text-primary uppercase tracking-wide">Recent Activity</h3>
-                                                    <span class="text-tertiary text-xs font-medium">${wallet.txCount} total</span>
+                                        </div>${!state.portfolioMode ? `
+                                            <!-- Transactions -->
+                                            <div class="glass rounded-xl p-5">
+                                                <div class="flex items-center justify-between mb-4">
+                                                    <div class="flex items-center gap-2">
+                                                        <i data-lucide="trending-up" class="w-4 h-4 text-secondary"></i>
+                                                        <h3 class="text-sm font-bold text-primary uppercase">Activity</h3>
+                                                        <span class="text-tertiary text-xs">${wallet.txCount} total</span>
+                                                    </div>
                                                 </div>
-                                            </div>
 
-                                            <!-- Search Filter -->
-                                            <div class="mb-4">
-                                                <div class="flex items-center gap-2 input-glass rounded-xl px-4 py-3">
-                                                    <i data-lucide="filter" class="w-4 h-4 text-tertiary"></i>
-                                                    <input
-                                                        type="text"
-                                                        id="searchInput-${walletIdx}"
-                                                        placeholder="Filter transactions..."
-                                                        class="flex-1 bg-transparent border-none outline-none text-primary text-sm"
-                                                        value="${state.searchTerm}"
-                                                    />
+                                                <!-- Search Filter -->
+                                                <div class="mb-4">
+                                                    <div class="flex items-center gap-2 input-glass rounded-xl px-3 py-2">
+                                                        <i data-lucide="filter" class="w-4 h-4 text-tertiary"></i>
+                                                        <input
+                                                            type="text"
+                                                            id="searchInput-${walletIdx}"
+                                                            placeholder="Filter..."
+                                                            class="flex-1 bg-transparent border-none outline-none text-primary text-xs"
+                                                            value="${state.searchTerm}"
+                                                        />
+                                                    </div>
                                                 </div>
-                                            </div>
 
-                                            <div class="space-y-3 max-h-96 overflow-y-auto scrollbar-glass pr-2">
-                                                ${getFilteredTransactions(wallet).map(tx => {
-                                                    const isReceived = tx.vout.some(v => v.scriptpubkey_address === wallet.address);
-                                                    const amount = isReceived
-                                                        ? tx.vout.reduce((sum, v) => v.scriptpubkey_address === wallet.address ? sum + v.value : sum, 0)
-                                                        : tx.vin.reduce((sum, v) => v.prevout?.scriptpubkey_address === wallet.address ? sum + v.prevout.value : sum, 0);
-                                                    
-                                                    return `
-                                                        <div class="glass-light rounded-xl p-4 hover:bg-white/5 transition-all">
-                                                            <div class="flex items-center justify-between">
-                                                                <div class="flex items-center gap-4 flex-1">
-                                                                    <div class="glass-light p-2.5 rounded-lg ${isReceived ? 'bg-green-500/10' : 'bg-red-500/10'}">
-                                                                        <i data-lucide="${isReceived ? 'arrow-down-left' : 'arrow-up-right'}" 
-                                                                           class="w-4 h-4 ${isReceived ? 'text-green-400' : 'text-red-400'}"></i>
+                                                <div class="space-y-2 max-h-80 overflow-y-auto scrollbar-glass pr-2">
+                                                    ${getFilteredTransactions(wallet).map(tx => {
+                                                        const isReceived = tx.vout.some(v => v.scriptpubkey_address === wallet.address);
+                                                        const amount = isReceived
+                                                            ? tx.vout.reduce((sum, v) => v.scriptpubkey_address === wallet.address ? sum + v.value : sum, 0)
+                                                            : tx.vin.reduce((sum, v) => v.prevout?.scriptpubkey_address === wallet.address ? sum + v.prevout.value : sum, 0);
+                                                        
+                                                        return `
+                                                            <div class="glass-light rounded-lg p-3 hover:bg-white/5 transition-all">
+                                                                <div class="flex items-center justify-between">
+                                                                    <div class="flex items-center gap-3 flex-1 min-w-0">
+                                                                        <div class="glass-light p-2 rounded-lg ${isReceived ? 'bg-green-500/10' : 'bg-red-500/10'}">
+                                                                            <i data-lucide="${isReceived ? 'arrow-down-left' : 'arrow-up-right'}" 
+                                                                               class="w-3 h-3 ${isReceived ? 'text-green-400' : 'text-red-400'}"></i>
+                                                                        </div>
+                                                                        <div class="flex-1 min-w-0">
+                                                                            <p class="text-secondary text-xs font-mono font-medium mb-0.5 truncate">
+                                                                                ${tx.txid.slice(0, 12)}...${tx.txid.slice(-6)}
+                                                                            </p>
+                                                                            <p class="text-tertiary text-[10px]">
+                                                                                ${tx.status.confirmed ? formatDate(tx.status.block_time) : 'Unconfirmed'}
+                                                                            </p>
+                                                                        </div>
                                                                     </div>
-                                                                    <div class="flex-1 min-w-0">
-                                                                        <p class="text-secondary text-xs font-mono font-medium mb-1 truncate">
-                                                                            ${tx.txid.slice(0, 16)}...${tx.txid.slice(-8)}
+                                                                    <div class="text-right ml-3">
+                                                                        <p class="text-xs font-bold ${isReceived ? 'text-green-400' : 'text-red-400'} mb-0.5">
+                                                                            ${isReceived ? '+' : '-'}${formatBTC(amount)}
                                                                         </p>
-                                                                        <p class="text-tertiary text-[10px]">
-                                                                            ${tx.status.confirmed ? formatDate(tx.status.block_time) : 'Unconfirmed'}
-                                                                        </p>
+                                                                        <p class="text-[9px] text-tertiary">${formatSatoshis(amount)} sats</p>
                                                                     </div>
-                                                                </div>
-                                                                <div class="text-right ml-4">
-                                                                    <p class="text-sm font-bold ${isReceived ? 'text-green-400' : 'text-red-400'} mb-1">
-                                                                        ${isReceived ? '+' : '-'}${formatBTC(amount)}
-                                                                    </p>
-                                                                    <p class="text-[10px] text-tertiary">${formatSatoshis(amount)} sats</p>
-                                                                    <p class="text-[10px] font-medium ${isReceived ? 'text-green-400' : 'text-red-400'}">${formatFiat(amount)}</p>
                                                                 </div>
                                                             </div>
-                                                        </div>
-                                                    `;
-                                                }).join('')}
+                                                        `;
+                                                    }).join('')}
+                                                </div>
                                             </div>
-                                                                                </div>
+                                        ` : `
+                                            <!-- Portfolio Mode - Simplified View -->
+                                            <div class="glass rounded-xl p-4">
+                                                <div class="flex items-center justify-between text-xs">
+                                                    <span class="text-tertiary">Transactions</span>
+                                                    <span class="text-primary font-bold">${wallet.txCount}</span>
+                                                </div>
+                                            </div>
+                                        `}
                                     </div>
                                 `).join('')}
                             </div>
-
 
                             <!-- Clear Button -->
                             <div class="flex justify-center mb-12">
@@ -819,9 +1405,26 @@
                                 <p class="text-secondary text-base font-light mb-2 max-w-md mx-auto">
                                     Enter a Bitcoin address above to start tracking wallet activity
                                 </p>
-                                <p class="text-tertiary text-sm">
-                                    Real-time data • Compare addresses • Track transactions
+                                <p class="text-tertiary text-sm mb-6">
+                                    Real-time data • Analytics • Compare • Portfolio tracking
                                 </p>
+                                <div class="flex justify-center gap-4">
+                                    <div class="glass rounded-xl p-4 text-left">
+                                        <i data-lucide="bar-chart-3" class="w-6 h-6 text-orange-500 mb-2"></i>
+                                        <p class="text-primary text-sm font-bold mb-1">Advanced Analytics</p>
+                                        <p class="text-tertiary text-xs">Deep insights into transaction patterns</p>
+                                    </div>
+                                    <div class="glass rounded-xl p-4 text-left">
+                                        <i data-lucide="pie-chart" class="w-6 h-6 text-orange-500 mb-2"></i>
+                                        <p class="text-primary text-sm font-bold mb-1">Portfolio View</p>
+                                        <p class="text-tertiary text-xs">Track multiple wallets at once</p>
+                                    </div>
+                                    <div class="glass rounded-xl p-4 text-left">
+                                        <i data-lucide="share-2" class="w-6 h-6 text-orange-500 mb-2"></i>
+                                        <p class="text-primary text-sm font-bold mb-1">Share & Export</p>
+                                        <p class="text-tertiary text-xs">PDF reports and shareable links</p>
+                                    </div>
+                                </div>
                             </div>
                         ` : ''}
                     </div>
@@ -830,14 +1433,18 @@
 
             lucide.createIcons();
 
+            // Event Listeners
             const input = document.getElementById('addressInput');
             const addBtn = document.getElementById('addBtn');
             const clearBtn = document.getElementById('clearBtn');
             const compareToggle = document.getElementById('compareToggle');
+            const portfolioToggle = document.getElementById('portfolioToggle');
             
             if (input) {
                 input.addEventListener('input', (e) => {
                     state.currentInput = e.target.value;
+                    validateInput(e.target.value);
+                    render();
                 });
                 input.addEventListener('keypress', (e) => {
                     if (e.key === 'Enter') addAddress();
@@ -856,26 +1463,37 @@
                 compareToggle.addEventListener('click', toggleCompareMode);
             }
 
+            if (portfolioToggle) {
+                portfolioToggle.addEventListener('click', togglePortfolioMode);
+            }
+
+            // Search input listeners with debounce
             state.addresses.forEach((_, idx) => {
                 const searchInput = document.getElementById(`searchInput-${idx}`);
                 if (searchInput) {
                     searchInput.addEventListener('input', (e) => {
-                        filterTransactions(idx, e.target.value);
+                        debouncedFilter(idx, e.target.value);
                     });
                 }
             });
 
+            // Make functions globally accessible
             window.removeAddress = removeAddress;
             window.exportToCSV = exportToCSV;
+            window.exportWalletToPDF = exportWalletToPDF;
             window.showQRCode = showQRCode;
             window.closeQRModal = closeQRModal;
+            window.closeAnalyticsModal = closeAnalyticsModal;
             window.toggleTheme = toggleTheme;
             window.toggleCurrency = toggleCurrency;
+            window.shareWallet = shareWallet;
+            window.showAnalytics = showAnalytics;
         }
 
         // Initialize
         fetchBTCPrice();
         setInterval(fetchBTCPrice, 60000); // Update price every minute
+        loadURLParams(); // Load address from URL if present
         render();
     </script>
 </body>
