@@ -1,702 +1,696 @@
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Lazare Bitcoin Address Tracker</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <script src="https://unpkg.com/lucide@latest"></script>
-        <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-        <style>
-            :root {
-                --bg-gradient-start: #1a1a1a;
-                --bg-gradient-mid: #2d2d2d;
-                --bg-gradient-end: #1a1a1a;
-            }
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lazare Bitcoin Address Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-gradient-start: #1a1a1a;
+            --bg-gradient-mid: #2d2d2d;
+            --bg-gradient-end: #1a1a1a;
+        }
 
-            body.light-mode {
-                --bg-gradient-start: #f5f5f5;
-                --bg-gradient-mid: #ffffff;
-                --bg-gradient-end: #f5f5f5;
-            }
+        body.light-mode {
+            --bg-gradient-start: #f5f5f5;
+            --bg-gradient-mid: #ffffff;
+            --bg-gradient-end: #f5f5f5;
+        }
 
-            body {
-                background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-mid) 50%, var(--bg-gradient-end) 100%);
-                min-height: 100vh;
-                transition: all 0.3s ease;
-            }
-            
-            .glass {
-                background: rgba(255, 255, 255, 0.03);
-                backdrop-filter: blur(40px);
-                -webkit-backdrop-filter: blur(40px);
-                border: 1px solid rgba(255, 255, 255, 0.08);
-                box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-            }
-
-            body.light-mode .glass {
-                background: rgba(255, 255, 255, 0.7);
-                border: 1px solid rgba(0, 0, 0, 0.1);
-                box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
-            }
-            
-            .glass-card {
-                background: rgba(255, 255, 255, 0.05);
-                backdrop-filter: blur(50px);
-                -webkit-backdrop-filter: blur(50px);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
-            }
-
-            body.light-mode .glass-card {
-                background: rgba(255, 255, 255, 0.9);
-                border: 1px solid rgba(0, 0, 0, 0.08);
-                box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.08);
-            }
-            
-            .glass-strong {
-                background: rgba(255, 255, 255, 0.08);
-                backdrop-filter: blur(30px);
-                -webkit-backdrop-filter: blur(30px);
-                border: 1px solid rgba(255, 255, 255, 0.15);
-            }
-
-            body.light-mode .glass-strong {
-                background: rgba(255, 255, 255, 0.95);
-                border: 1px solid rgba(0, 0, 0, 0.1);
-            }
-            
-            .glass-light {
-                background: rgba(255, 255, 255, 0.02);
-                backdrop-filter: blur(20px);
-                -webkit-backdrop-filter: blur(20px);
-                border: 1px solid rgba(255, 255, 255, 0.05);
-            }
-
-            body.light-mode .glass-light {
-                background: rgba(255, 255, 255, 0.6);
-                border: 1px solid rgba(0, 0, 0, 0.05);
-            }
-            
-            .glass-orange {
-                background: rgba(251, 146, 60, 0.1);
-                backdrop-filter: blur(30px);
-                -webkit-backdrop-filter: blur(30px);
-                border: 1px solid rgba(251, 146, 60, 0.2);
-            }
-
-            body.light-mode .glass-orange {
-                background: rgba(251, 146, 60, 0.15);
-                border: 1px solid rgba(251, 146, 60, 0.3);
-            }
-            
-            .input-glass {
-                background: rgba(255, 255, 255, 0.05);
-                backdrop-filter: blur(20px);
-                -webkit-backdrop-filter: blur(20px);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-            }
-
-            body.light-mode .input-glass {
-                background: rgba(255, 255, 255, 0.9);
-                border: 1px solid rgba(0, 0, 0, 0.1);
-            }
-            
-            .input-glass::placeholder {
-                color: rgba(255, 255, 255, 0.4);
-            }
-
-            body.light-mode .input-glass::placeholder {
-                color: rgba(0, 0, 0, 0.4);
-            }
-            
-            .input-glass:focus {
-                background: rgba(255, 255, 255, 0.08);
-                border: 1px solid rgba(251, 146, 60, 0.3);
-                outline: none;
-            }
-
-            body.light-mode .input-glass:focus {
-                background: rgba(255, 255, 255, 1);
-                border: 1px solid rgba(251, 146, 60, 0.5);
-            }
-            
-            .btn-glass {
-                background: rgba(255, 255, 255, 0.05);
-                backdrop-filter: blur(20px);
-                -webkit-backdrop-filter: blur(20px);
-                border: 1px solid rgba(255, 255, 255, 0.15);
-                transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            }
-
-            body.light-mode .btn-glass {
-                background: rgba(255, 255, 255, 0.95);
-                border: 1px solid rgba(0, 0, 0, 0.1);
-            }
-            
-            .btn-glass:hover {
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                transform: translateY(-2px);
-                box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.5);
-            }
-
-            body.light-mode .btn-glass:hover {
-                background: rgba(255, 255, 255, 1);
-                box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.1);
-            }
-            
-            .btn-orange {
-                background: linear-gradient(135deg, #fb923c 0%, #f97316 100%);
-                border: 1px solid rgba(251, 146, 60, 0.3);
-                transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-                box-shadow: 0 4px 20px 0 rgba(251, 146, 60, 0.3);
-            }
-            
-            .btn-orange:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 8px 30px 0 rgba(251, 146, 60, 0.5);
-                background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
-            }
-            
-            .scrollbar-glass::-webkit-scrollbar {
-                width: 8px;
-            }
-            
-            .scrollbar-glass::-webkit-scrollbar-track {
-                background: rgba(255, 255, 255, 0.03);
-                border-radius: 10px;
-            }
-            
-            .scrollbar-glass::-webkit-scrollbar-thumb {
-                background: rgba(255, 255, 255, 0.1);
-                border-radius: 10px;
-            }
-            
-            .scrollbar-glass::-webkit-scrollbar-thumb:hover {
-                background: rgba(255, 255, 255, 0.2);
-            }
-
-            body.light-mode .scrollbar-glass::-webkit-scrollbar-track {
-                background: rgba(0, 0, 0, 0.05);
-            }
-
-            body.light-mode .scrollbar-glass::-webkit-scrollbar-thumb {
-                background: rgba(0, 0, 0, 0.2);
-            }
-            
-            .text-shadow {
-                text-shadow: 0 2px 20px rgba(0, 0, 0, 0.5);
-            }
-
-            body.light-mode .text-shadow {
-                text-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
-            }
-            
-            .animate-float {
-                animation: float 6s ease-in-out infinite;
-            }
-            
-            @keyframes float {
-                0%, 100% { transform: translateY(0px); }
-                50% { transform: translateY(-10px); }
-            }
-            
-            .glow-orange {
-                box-shadow: 0 0 30px rgba(251, 146, 60, 0.3);
-            }
-
-            .text-primary {
-                color: #fff;
-            }
-
-            body.light-mode .text-primary {
-                color: #1a1a1a;
-            }
-
-            .text-secondary {
-                color: rgba(255, 255, 255, 0.7);
-            }
-
-            body.light-mode .text-secondary {
-                color: rgba(0, 0, 0, 0.6);
-            }
-
-            .text-tertiary {
-                color: rgba(255, 255, 255, 0.4);
-            }
-
-            body.light-mode .text-tertiary {
-                color: rgba(0, 0, 0, 0.4);
-            }
-
-            .modal {
-                display: none;
-                position: fixed;
-                z-index: 1000;
-                left: 0;
-                top: 0;
-                width: 100%;
-                height: 100%;
-                background-color: rgba(0, 0, 0, 0.8);
-            }
-
-            .modal.active {
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            }
-
-            #qrcode canvas {
-                border-radius: 12px;
-            }
-        </style>
-    </head>
-    <body>
-        <div id="root"></div>
-
-        <!-- QR Code Modal -->
-        <div id="qrModal" class="modal">
-            <div class="glass-card rounded-3xl p-8 max-w-md mx-4">
-                <div class="flex items-center justify-between mb-6">
-                    <h3 class="text-xl font-bold text-primary">QR Code</h3>
-                    <button onclick="closeQRModal()" class="glass p-2 rounded-xl hover:bg-white/10 transition-all">
-                        <i data-lucide="x" class="w-5 h-5 text-secondary"></i>
-                    </button>
-                </div>
-                <div id="qrcode" class="flex justify-center mb-4"></div>
-                <p id="qrAddress" class="text-sm font-mono text-secondary text-center break-all"></p>
-            </div>
-        </div>
+        body {
+            background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-mid) 50%, var(--bg-gradient-end) 100%);
+            min-height: 100vh;
+            transition: all 0.3s ease;
+        }
         
-        <script>
-            const { Search, Wallet, ArrowUpRight, ArrowDownLeft, TrendingUp, X, GitCompare, Bitcoin, Download, QrCode, Sun, Moon, DollarSign, Euro, Filter } = lucide;
-            
-            let state = {
-                addresses: [],
-                currentInput: '',
-                loading: false,
-                error: '',
-                compareMode: false,
-                theme: 'dark',
-                currency: 'USD',
-                btcPrice: { USD: 0, EUR: 0 },
-                searchTerm: '',
-                chartInstances: {}
-            };
+        .glass {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(40px);
+            -webkit-backdrop-filter: blur(40px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
 
-            async function fetchBTCPrice() {
-                try {
-                    const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd,eur');
-                    const data = await response.json();
-                    state.btcPrice = {
-                        USD: data.bitcoin.usd,
-                        EUR: data.bitcoin.eur
-                    };
-                } catch (err) {
-                    console.error('Failed to fetch BTC price:', err);
+        body.light-mode .glass {
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+        }
+        
+        .glass-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(50px);
+            -webkit-backdrop-filter: blur(50px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+        }
+
+        body.light-mode .glass-card {
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.08);
+        }
+        
+        .glass-strong {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(30px);
+            -webkit-backdrop-filter: blur(30px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+
+        body.light-mode .glass-strong {
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+        }
+        
+        .glass-light {
+            background: rgba(255, 255, 255, 0.02);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        body.light-mode .glass-light {
+            background: rgba(255, 255, 255, 0.6);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+        }
+        
+        .glass-orange {
+            background: rgba(251, 146, 60, 0.1);
+            backdrop-filter: blur(30px);
+            -webkit-backdrop-filter: blur(30px);
+            border: 1px solid rgba(251, 146, 60, 0.2);
+        }
+
+        body.light-mode .glass-orange {
+            background: rgba(251, 146, 60, 0.15);
+            border: 1px solid rgba(251, 146, 60, 0.3);
+        }
+        
+        .input-glass {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        body.light-mode .input-glass {
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+        }
+        
+        .input-glass::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        body.light-mode .input-glass::placeholder {
+            color: rgba(0, 0, 0, 0.4);
+        }
+        
+        .input-glass:focus {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(251, 146, 60, 0.3);
+            outline: none;
+        }
+
+        body.light-mode .input-glass:focus {
+            background: rgba(255, 255, 255, 1);
+            border: 1px solid rgba(251, 146, 60, 0.5);
+        }
+        
+        .btn-glass {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        body.light-mode .btn-glass {
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+        }
+        
+        .btn-glass:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+            box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.5);
+        }
+
+        body.light-mode .btn-glass:hover {
+            background: rgba(255, 255, 255, 1);
+            box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.1);
+        }
+        
+        .btn-orange {
+            background: linear-gradient(135deg, #fb923c 0%, #f97316 100%);
+            border: 1px solid rgba(251, 146, 60, 0.3);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 20px 0 rgba(251, 146, 60, 0.3);
+        }
+        
+        .btn-orange:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px 0 rgba(251, 146, 60, 0.5);
+            background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+        }
+        
+        .scrollbar-glass::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .scrollbar-glass::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 10px;
+        }
+        
+        .scrollbar-glass::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+        
+        .scrollbar-glass::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        body.light-mode .scrollbar-glass::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.05);
+        }
+
+        body.light-mode .scrollbar-glass::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.2);
+        }
+        
+        .text-shadow {
+            text-shadow: 0 2px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        body.light-mode .text-shadow {
+            text-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+        }
+        
+        .animate-float {
+            animation: float 6s ease-in-out infinite;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        
+        .glow-orange {
+            box-shadow: 0 0 30px rgba(251, 146, 60, 0.3);
+        }
+
+        .text-primary {
+            color: #fff;
+        }
+
+        body.light-mode .text-primary {
+            color: #1a1a1a;
+        }
+
+        .text-secondary {
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        body.light-mode .text-secondary {
+            color: rgba(0, 0, 0, 0.6);
+        }
+
+        .text-tertiary {
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        body.light-mode .text-tertiary {
+            color: rgba(0, 0, 0, 0.4);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+        }
+
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #qrcode canvas {
+            border-radius: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- QR Code Modal -->
+    <div id="qrModal" class="modal">
+        <div class="glass-card rounded-3xl p-8 max-w-md mx-4">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-bold text-primary">QR Code</h3>
+                <button onclick="closeQRModal()" class="glass p-2 rounded-xl hover:bg-white/10 transition-all">
+                    <i data-lucide="x" class="w-5 h-5 text-secondary"></i>
+                </button>
+            </div>
+            <div id="qrcode" class="flex justify-center mb-4"></div>
+            <p id="qrAddress" class="text-sm font-mono text-secondary text-center break-all"></p>
+        </div>
+    </div><script>
+        const { Search, Wallet, ArrowUpRight, ArrowDownLeft, TrendingUp, X, GitCompare, Bitcoin, Download, QrCode, Sun, Moon, DollarSign, Euro, Filter } = lucide;
+        
+        let state = {
+            addresses: [],
+            currentInput: '',
+            loading: false,
+            error: '',
+            compareMode: false,
+            theme: 'dark',
+            currency: 'USD',
+            btcPrice: { USD: 0, EUR: 0 },
+            searchTerm: '',
+            chartInstances: {}
+        };
+
+        async function fetchBTCPrice() {
+            try {
+                const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd,eur');
+                const data = await response.json();
+                state.btcPrice = {
+                    USD: data.bitcoin.usd,
+                    EUR: data.bitcoin.eur
+                };
+            } catch (err) {
+                console.error('Failed to fetch BTC price:', err);
+            }
+        }
+
+        function formatBTC(satoshis) {
+            return (satoshis / 100000000).toFixed(8);
+        }
+
+        function formatFiat(satoshis) {
+            const btc = satoshis / 100000000;
+            const price = state.btcPrice[state.currency];
+            const fiat = btc * price;
+            const symbol = state.currency === 'USD' ? '$' : '€';
+            return `${symbol}${fiat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        }
+
+        function formatSatoshis(satoshis) {
+            return satoshis.toLocaleString();
+        }
+
+        function formatDate(timestamp) {
+            return new Date(timestamp * 1000).toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        async function fetchWalletData(address) {
+            try {
+                const cleanAddress = address.trim();
+                const response = await fetch(`https://mempool.space/api/address/${cleanAddress}`);
+                
+                if (!response.ok) {
+                    throw new Error(`API returned status ${response.status}`);
                 }
+
+                const data = await response.json();
+                
+                const txResponse = await fetch(`https://mempool.space/api/address/${cleanAddress}/txs`);
+                const transactions = await txResponse.json();
+
+                return {
+                    address: cleanAddress,
+                    balance: data.chain_stats.funded_txo_sum - data.chain_stats.spent_txo_sum,
+                    totalReceived: data.chain_stats.funded_txo_sum,
+                    totalSent: data.chain_stats.spent_txo_sum,
+                    txCount: data.chain_stats.tx_count,
+                    transactions: transactions
+                };
+            } catch (err) {
+                throw err;
             }
+        }
 
-            function formatBTC(satoshis) {
-                return (satoshis / 100000000).toFixed(8);
-            }
-
-            function formatFiat(satoshis) {
-                const btc = satoshis / 100000000;
-                const price = state.btcPrice[state.currency];
-                const fiat = btc * price;
-                const symbol = state.currency === 'USD' ? '$' : '€';
-                return `${symbol}${fiat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-            }
-
-            function formatSatoshis(satoshis) {
-                return satoshis.toLocaleString();
-            }
-
-            function formatDate(timestamp) {
-                return new Date(timestamp * 1000).toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                });
-            }
-
-            async function fetchWalletData(address) {
-                try {
-                    const cleanAddress = address.trim();
-                    const response = await fetch(`https://mempool.space/api/address/${cleanAddress}`);
-                    
-                    if (!response.ok) {
-                        throw new Error(`API returned status ${response.status}`);
-                    }
-
-                    const data = await response.json();
-                    
-                    const txResponse = await fetch(`https://mempool.space/api/address/${cleanAddress}/txs`);
-                    const transactions = await txResponse.json();
-
-                    return {
-                        address: cleanAddress,
-                        balance: data.chain_stats.funded_txo_sum - data.chain_stats.spent_txo_sum,
-                        totalReceived: data.chain_stats.funded_txo_sum,
-                        totalSent: data.chain_stats.spent_txo_sum,
-                        txCount: data.chain_stats.tx_count,
-                        transactions: transactions
-                    };
-                } catch (err) {
-                    throw err;
-                }
-            }
-
-            async function addAddress() {
-                if (!state.currentInput.trim()) {
-                    state.error = 'Please enter a wallet address';
-                    render();
-                    return;
-                }
-
-                if (state.addresses.length >= 2) {
-                    state.error = 'Maximum 2 addresses for comparison';
-                    render();
-                    return;
-                }
-
-                state.loading = true;
-                state.error = '';
+        async function addAddress() {
+            if (!state.currentInput.trim()) {
+                state.error = 'Please enter a wallet address';
                 render();
-
-                try {
-                    const walletData = await fetchWalletData(state.currentInput);
-                    state.addresses.push(walletData);
-                    state.currentInput = '';
-                    setTimeout(() => createChart(state.addresses.length - 1), 100);
-                } catch (err) {
-                    state.error = `Error: ${err.message}. Please check the address and try again.`;
-                } finally {
-                    state.loading = false;
-                    render();
-                }
+                return;
             }
 
-            function removeAddress(index) {
-                if (state.chartInstances[index]) {
-                    state.chartInstances[index].destroy();
-                    delete state.chartInstances[index];
-                }
-                state.addresses.splice(index, 1);
+            if (state.addresses.length >= 2) {
+                state.error = 'Maximum 2 addresses for comparison';
                 render();
+                return;
             }
 
-            function clearAll() {
-                Object.values(state.chartInstances).forEach(chart => chart.destroy());
-                state.chartInstances = {};
-                state.addresses = [];
+            state.loading = true;
+            state.error = '';
+            render();
+
+            try {
+                const walletData = await fetchWalletData(state.currentInput);
+                state.addresses.push(walletData);
                 state.currentInput = '';
-                state.error = '';
-                state.searchTerm = '';
+                setTimeout(() => createChart(state.addresses.length - 1), 100);
+            } catch (err) {
+                state.error = `Error: ${err.message}. Please check the address and try again.`;
+            } finally {
+                state.loading = false;
                 render();
             }
+        }
 
-            function toggleCompareMode() {
-                state.compareMode = !state.compareMode;
-                if (!state.compareMode) {
-                    state.addresses = state.addresses.slice(0, 1);
+        function removeAddress(index) {
+            if (state.chartInstances[index]) {
+                state.chartInstances[index].destroy();
+                delete state.chartInstances[index];
+            }
+            state.addresses.splice(index, 1);
+            render();
+        }
+
+        function clearAll() {
+            Object.values(state.chartInstances).forEach(chart => chart.destroy());
+            state.chartInstances = {};
+            state.addresses = [];
+            state.currentInput = '';
+            state.error = '';
+            state.searchTerm = '';
+            render();
+        }
+
+        function toggleCompareMode() {
+            state.compareMode = !state.compareMode;
+            if (!state.compareMode) {
+                state.addresses = state.addresses.slice(0, 1);
+            }
+            render();
+        }
+
+        function toggleTheme() {
+            state.theme = state.theme === 'dark' ? 'light' : 'dark';
+            document.body.classList.toggle('light-mode');
+            Object.keys(state.chartInstances).forEach(idx => {
+                createChart(parseInt(idx));
+            });
+            render();
+        }
+
+        function toggleCurrency() {
+            state.currency = state.currency === 'USD' ? 'EUR' : 'USD';
+            render();
+        }
+
+        function exportToCSV(walletIdx) {
+            const wallet = state.addresses[walletIdx];
+            let csv = 'Transaction ID,Type,Amount (BTC),Amount (Satoshis),Date,Block Height,Status\n';
+            
+            wallet.transactions.forEach(tx => {
+                const isReceived = tx.vout.some(v => v.scriptpubkey_address === wallet.address);
+                const amount = isReceived
+                    ? tx.vout.reduce((sum, v) => v.scriptpubkey_address === wallet.address ? sum + v.value : sum, 0)
+                    : tx.vin.reduce((sum, v) => v.prevout?.scriptpubkey_address === wallet.address ? sum + v.prevout.value : sum, 0);
+                
+                const type = isReceived ? 'Received' : 'Sent';
+                const date = tx.status.confirmed ? formatDate(tx.status.block_time) : 'Unconfirmed';
+                const block = tx.status.confirmed ? tx.status.block_height : 'Pending';
+                const status = tx.status.confirmed ? 'Confirmed' : 'Unconfirmed';
+                
+                csv += `${tx.txid},${type},${formatBTC(amount)},${amount},${date},${block},${status}\n`;
+            });
+            
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `transactions_${wallet.address.slice(0, 8)}.csv`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+        }
+
+        function showQRCode(address) {
+            const modal = document.getElementById('qrModal');
+            const qrDiv = document.getElementById('qrcode');
+            const addrText = document.getElementById('qrAddress');
+            
+            qrDiv.innerHTML = '';
+            addrText.textContent = address;
+            
+            new QRCode(qrDiv, {
+                text: address,
+                width: 256,
+                height: 256,
+                colorDark: state.theme === 'dark' ? '#ffffff' : '#000000',
+                colorLight: state.theme === 'dark' ? '#1a1a1a' : '#ffffff'
+            });
+            
+            modal.classList.add('active');
+            lucide.createIcons();
+        }
+
+        function closeQRModal() {
+            document.getElementById('qrModal').classList.remove('active');
+        }
+
+        function filterTransactions(walletIdx, term) {
+            state.searchTerm = term;
+            render();
+        }
+
+        function getFilteredTransactions(wallet) {
+            if (!state.searchTerm) return wallet.transactions.slice(0, 10);
+            
+            return wallet.transactions.filter(tx => 
+                tx.txid.toLowerCase().includes(state.searchTerm.toLowerCase()) ||
+                formatDate(tx.status.block_time).toLowerCase().includes(state.searchTerm.toLowerCase())
+            ).slice(0, 10);
+        }
+
+        function createChart(walletIdx) {
+            const wallet = state.addresses[walletIdx];
+            const canvas = document.getElementById(`chart-${walletIdx}`);
+            
+            if (!canvas) return;
+            
+            if (state.chartInstances[walletIdx]) {
+                state.chartInstances[walletIdx].destroy();
+            }
+            
+            const ctx = canvas.getContext('2d');
+            
+            const recentTxs = wallet.transactions.slice(0, 20).reverse();
+            let runningBalance = wallet.balance;
+            
+            const balanceHistory = recentTxs.map(tx => {
+                const isReceived = tx.vout.some(v => v.scriptpubkey_address === wallet.address);
+                const amount = isReceived
+                    ? tx.vout.reduce((sum, v) => v.scriptpubkey_address === wallet.address ? sum + v.value : sum, 0)
+                    : tx.vin.reduce((sum, v) => v.prevout?.scriptpubkey_address === wallet.address ? sum + v.prevout.value : sum, 0);
+                
+                if (!isReceived) {
+                    runningBalance += amount;
+                } else {
+                    runningBalance -= amount;
                 }
-                render();
-            }
-
-            function toggleTheme() {
-                state.theme = state.theme === 'dark' ? 'light' : 'dark';
-                document.body.classList.toggle('light-mode');
-                Object.keys(state.chartInstances).forEach(idx => {
-                    createChart(parseInt(idx));
-                });
-                render();
-            }
-
-            function toggleCurrency() {
-                state.currency = state.currency === 'USD' ? 'EUR' : 'USD';
-                render();
-            }
-
-            function exportToCSV(walletIdx) {
-                const wallet = state.addresses[walletIdx];
-                let csv = 'Transaction ID,Type,Amount (BTC),Amount (Satoshis),Date,Block Height,Status\n';
                 
-                wallet.transactions.forEach(tx => {
-                    const isReceived = tx.vout.some(v => v.scriptpubkey_address === wallet.address);
-                    const amount = isReceived
-                        ? tx.vout.reduce((sum, v) => v.scriptpubkey_address === wallet.address ? sum + v.value : sum, 0)
-                        : tx.vin.reduce((sum, v) => v.prevout?.scriptpubkey_address === wallet.address ? sum + v.prevout.value : sum, 0);
-                    
-                    const type = isReceived ? 'Received' : 'Sent';
-                    const date = tx.status.confirmed ? formatDate(tx.status.block_time) : 'Unconfirmed';
-                    const block = tx.status.confirmed ? tx.status.block_height : 'Pending';
-                    const status = tx.status.confirmed ? 'Confirmed' : 'Unconfirmed';
-                    
-                    csv += `${tx.txid},${type},${formatBTC(amount)},${amount},${date},${block},${status}\n`;
-                });
-                
-                const blob = new Blob([csv], { type: 'text/csv' });
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `transactions_${wallet.address.slice(0, 8)}.csv`;
-                a.click();
-                window.URL.revokeObjectURL(url);
-            }
-
-            function showQRCode(address) {
-                const modal = document.getElementById('qrModal');
-                const qrDiv = document.getElementById('qrcode');
-                const addrText = document.getElementById('qrAddress');
-                
-                qrDiv.innerHTML = '';
-                addrText.textContent = address;
-                
-                new QRCode(qrDiv, {
-                    text: address,
-                    width: 256,
-                    height: 256,
-                    colorDark: state.theme === 'dark' ? '#ffffff' : '#000000',
-                    colorLight: state.theme === 'dark' ? '#1a1a1a' : '#ffffff'
-                });
-                
-                modal.classList.add('active');
-                lucide.createIcons();
-            }
-
-            function closeQRModal() {
-                document.getElementById('qrModal').classList.remove('active');
-            }
-
-            function filterTransactions(walletIdx, term) {
-                state.searchTerm = term;
-                render();
-            }
-
-            function getFilteredTransactions(wallet) {
-                if (!state.searchTerm) return wallet.transactions.slice(0, 10);
-                
-                return wallet.transactions.filter(tx => 
-                    tx.txid.toLowerCase().includes(state.searchTerm.toLowerCase()) ||
-                    formatDate(tx.status.block_time).toLowerCase().includes(state.searchTerm.toLowerCase())
-                ).slice(0, 10);
-            }
-
-            function createChart(walletIdx) {
-                const wallet = state.addresses[walletIdx];
-                const canvas = document.getElementById(`chart-${walletIdx}`);
-                
-                if (!canvas) return;
-                
-                if (state.chartInstances[walletIdx]) {
-                    state.chartInstances[walletIdx].destroy();
-                }
-                
-                const ctx = canvas.getContext('2d');
-                
-                const recentTxs = wallet.transactions.slice(0, 20).reverse();
-                let runningBalance = wallet.balance;
-                
-                const balanceHistory = recentTxs.map(tx => {
-                    const isReceived = tx.vout.some(v => v.scriptpubkey_address === wallet.address);
-                    const amount = isReceived
-                        ? tx.vout.reduce((sum, v) => v.scriptpubkey_address === wallet.address ? sum + v.value : sum, 0)
-                        : tx.vin.reduce((sum, v) => v.prevout?.scriptpubkey_address === wallet.address ? sum + v.prevout.value : sum, 0);
-                    
-                    if (!isReceived) {
-                        runningBalance += amount;
-                    } else {
-                        runningBalance -= amount;
-                    }
-                    
-                    return runningBalance;
-                }).reverse();
-                
-                balanceHistory.push(wallet.balance);
-                
-                const isDark = state.theme === 'dark';
-                
-                state.chartInstances[walletIdx] = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: [...recentTxs.map(tx => formatDate(tx.status.block_time)), 'Now'],
-                        datasets: [{
-                            label: 'Balance (Satoshis)',
-                            data: balanceHistory,
-                            borderColor: '#fb923c',
-                            backgroundColor: 'rgba(251, 146, 60, 0.1)',
-                            tension: 0.4,
-                            fill: true
-                        }]
+                return runningBalance;
+            }).reverse();
+            
+            balanceHistory.push(wallet.balance);
+            
+            const isDark = state.theme === 'dark';
+            
+            state.chartInstances[walletIdx] = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [...recentTxs.map(tx => formatDate(tx.status.block_time)), 'Now'],
+                    datasets: [{
+                        label: 'Balance (Satoshis)',
+                        data: balanceHistory,
+                        borderColor: '#fb923c',
+                        backgroundColor: 'rgba(251, 146, 60, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: isDark ? '#fff' : '#1a1a1a'
+                            }
+                        }
                     },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                labels: {
-                                    color: isDark ? '#fff' : '#1a1a1a'
-                                }
+                    scales: {
+                        x: {
+                            ticks: {
+                                color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)',
+                                maxRotation: 45,
+                                minRotation: 45
+                            },
+                            grid: {
+                                color: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'
                             }
                         },
-                        scales: {
-                            x: {
-                                ticks: {
-                                    color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)',
-                                    maxRotation: 45,
-                                    minRotation: 45
-                                },
-                                grid: {
-                                    color: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'
+                        y: {
+                            ticks: {
+                                color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)',
+                                callback: function(value) {
+                                    return formatBTC(value) + ' BTC';
                                 }
                             },
-                            y: {
-                                ticks: {
-                                    color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)',
-                                    callback: function(value) {
-                                        return formatBTC(value) + ' BTC';
-                                    }
-                                },
-                                grid: {
-                                    color: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'
-                                }
+                            grid: {
+                                color: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'
                             }
                         }
                     }
-                });
-            }
-
-            function render() {
-                const root = document.getElementById('root');
-                
-                root.innerHTML = `
-                    <div class="min-h-screen p-4 md:p-8 lg:p-12">
-                        <div class="max-w-7xl mx-auto">
-                            <!-- Header -->
-                            <div class="text-center mb-16 pt-12 animate-float">
-                                <div class="flex justify-end mb-4">
-                                    <button onclick="toggleTheme()" class="btn-glass p-3 rounded-xl mr-3">
-                                        <i data-lucide="${state.theme === 'dark' ? 'sun' : 'moon'}" class="w-5 h-5 text-secondary"></i>
-                                    </button>
-                                    <button onclick="toggleCurrency()" class="btn-glass px-4 py-3 rounded-xl flex items-center gap-2">
-                                        <i data-lucide="${state.currency === 'USD' ? 'dollar-sign' : 'euro'}" class="w-5 h-5 text-secondary"></i>
-                                        <span class="text-secondary font-medium">${state.currency}</span>
-                                    </button>
-                                </div>
-                                <div class="inline-flex items-center gap-5 mb-8">
-                                    <div class="glass-card p-5 rounded-3xl glow-orange">
-                                        <i data-lucide="wallet" class="w-12 h-12 text-orange-500"></i>
-                                    </div>
-                                    <div class="text-left">
-                                        <h1 class="text-6xl md:text-7xl font-bold text-primary tracking-tight text-shadow mb-2">
-                                            Lazare
-                                        </h1>
-                                        <p class="text-orange-500 text-sm font-semibold tracking-widest uppercase">Bitcoin Address Tracker</p>
-                                    </div>
-                                </div>
-                                <p class="text-secondary text-lg font-light max-w-2xl mx-auto leading-relaxed">
-                                    Track and analyze Bitcoin wallet addresses with real-time data. 
-                                    Compare multiple addresses to gain deeper insights.
-                                </p>
-                            </div>
-
-                            <!-- Compare Toggle -->
-                            <div class="flex justify-center mb-10">
-                                <button
-                                    id="compareToggle"
-                                    class="btn-glass inline-flex items-center gap-3 px-10 py-5 rounded-2xl text-primary font-medium text-base"
-                                >
-                                    <i data-lucide="git-compare" class="w-5 h-5"></i>
-                                    <span>${state.compareMode ? 'Exit Compare Mode' : 'Compare Addresses'}</span>
+                }
+            });
+        }
+        function render() {
+            const root = document.getElementById('root');
+            
+            root.innerHTML = `
+                <div class="min-h-screen p-4 md:p-8 lg:p-12">
+                    <div class="max-w-7xl mx-auto">
+                        <!-- Header -->
+                        <div class="text-center mb-16 pt-12 animate-float">
+                            <div class="flex justify-end mb-4">
+                                <button onclick="toggleTheme()" class="btn-glass p-3 rounded-xl mr-3">
+                                    <i data-lucide="${state.theme === 'dark' ? 'sun' : 'moon'}" class="w-5 h-5 text-secondary"></i>
+                                </button>
+                                <button onclick="toggleCurrency()" class="btn-glass px-4 py-3 rounded-xl flex items-center gap-2">
+                                    <i data-lucide="${state.currency === 'USD' ? 'dollar-sign' : 'euro'}" class="w-5 h-5 text-secondary"></i>
+                                    <span class="text-secondary font-medium">${state.currency}</span>
                                 </button>
                             </div>
-
-                            <!-- Search Bar -->
-                            <div class="mb-16 max-w-4xl mx-auto">
-                                <div class="glass-card rounded-3xl p-3 shadow-2xl">
-                                    <div class="flex flex-col md:flex-row items-stretch md:items-center gap-3 px-4">
-                                        <div class="flex items-center gap-4 flex-1">
-                                            <i data-lucide="search" class="w-6 h-6 text-tertiary"></i>
-                                            <input
-                                                type="text"
-                                                id="addressInput"
-                                                value="${state.currentInput}"
-                                                placeholder="Enter Bitcoin address to track..."
-                                                class="flex-1 input-glass border-none outline-none text-primary py-5 text-base rounded-xl px-6 transition-all"
-                                            />
-                                        </div>
-                                        <button
-                                            id="addBtn"
-                                            ${state.loading ? 'disabled' : ''}
-                                            class="btn-orange px-10 py-5 text-white rounded-xl font-bold text-base disabled:opacity-50 disabled:cursor-not-allowed"
-                                        >
-                                            ${state.loading ? 'Loading...' : state.addresses.length > 0 ? '+ Add Address' : 'Track Address'}
-                                        </button>
-                                    </div>
+                            <div class="inline-flex items-center gap-5 mb-8">
+                                <div class="glass-card p-5 rounded-3xl glow-orange">
+                                    <i data-lucide="wallet" class="w-12 h-12 text-orange-500"></i>
                                 </div>
-                                ${state.error ? `<p class="text-orange-400 text-sm mt-5 text-center font-medium">${state.error}</p>` : ''}
-                                ${state.compareMode ? `<p class="text-tertiary text-sm mt-4 text-center">Compare mode is active • You can add up to 2 addresses</p>` : ''}
+                                <div class="text-left">
+                                    <h1 class="text-6xl md:text-7xl font-bold text-primary tracking-tight text-shadow mb-2">
+                                        Lazare
+                                    </h1>
+                                    <p class="text-orange-500 text-sm font-semibold tracking-widest uppercase">Bitcoin Address Tracker</p>
+                                </div>
                             </div>
+                            <p class="text-secondary text-lg font-light max-w-2xl mx-auto leading-relaxed">
+                                Track and analyze Bitcoin wallet addresses with real-time data. 
+                                Compare multiple addresses to gain deeper insights.
+                            </p>
+                        </div>
 
-                            ${state.addresses.length > 0 ? `
-                                <!-- Wallet Cards Container -->
-                                <div class="grid grid-cols-1 ${state.addresses.length > 1 ? 'lg:grid-cols-2' : ''} gap-10 mb-12">
-                                    ${state.addresses.map((wallet, walletIdx) => `
-                                        <div class="glass-card rounded-3xl p-8 shadow-2xl">
-                                            <!-- Wallet Header -->
-                                            <div class="flex items-start justify-between mb-10">
-                                                <div class="flex items-center gap-4">
-                                                    <div class="glass p-3.5 rounded-2xl">
-                                                        <i data-lucide="wallet" class="w-7 h-7 text-orange-500"></i>
-                                                    </div>
-                                                    <div>
-                                                        <p class="text-xs text-tertiary mb-2 uppercase tracking-wider font-semibold">Wallet Address</p>
-                                                        <p class="text-sm font-mono text-secondary font-medium">${wallet.address.slice(0, 16)}...${wallet.address.slice(-12)}</p>
-                                                    </div>
+                        <!-- Compare Toggle -->
+                        <div class="flex justify-center mb-10">
+                            <button
+                                id="compareToggle"
+                                class="btn-glass inline-flex items-center gap-3 px-10 py-5 rounded-2xl text-primary font-medium text-base"
+                            >
+                                <i data-lucide="git-compare" class="w-5 h-5"></i>
+                                <span>${state.compareMode ? 'Exit Compare Mode' : 'Compare Addresses'}</span>
+                            </button>
+                        </div>
+
+                        <!-- Search Bar -->
+                        <div class="mb-16 max-w-4xl mx-auto">
+                            <div class="glass-card rounded-3xl p-3 shadow-2xl">
+                                <div class="flex flex-col md:flex-row items-stretch md:items-center gap-3 px-4">
+                                    <div class="flex items-center gap-4 flex-1">
+                                        <i data-lucide="search" class="w-6 h-6 text-tertiary"></i>
+                                        <input
+                                            type="text"
+                                            id="addressInput"
+                                            value="${state.currentInput}"
+                                            placeholder="Enter Bitcoin address to track..."
+                                            class="flex-1 input-glass border-none outline-none text-primary py-5 text-base rounded-xl px-6 transition-all"
+                                        />
+                                    </div>
+                                    <button
+                                        id="addBtn"
+                                        ${state.loading ? 'disabled' : ''}
+                                        class="btn-orange px-10 py-5 text-white rounded-xl font-bold text-base disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        ${state.loading ? 'Loading...' : state.addresses.length > 0 ? '+ Add Address' : 'Track Address'}
+                                    </button>
+                                </div>
+                            </div>
+                            ${state.error ? `<p class="text-orange-400 text-sm mt-5 text-center font-medium">${state.error}</p>` : ''}
+                            ${state.compareMode ? `<p class="text-tertiary text-sm mt-4 text-center">Compare mode is active • You can add up to 2 addresses</p>` : ''}
+                        </div>
+
+                        ${state.addresses.length > 0 ? `
+                            <!-- Wallet Cards Container -->
+                            <div class="grid grid-cols-1 ${state.addresses.length > 1 ? 'lg:grid-cols-2' : ''} gap-10 mb-12">
+                                ${state.addresses.map((wallet, walletIdx) => `
+                                    <div class="glass-card rounded-3xl p-8 shadow-2xl">
+                                        <!-- Wallet Header -->
+                                        <div class="flex items-start justify-between mb-10">
+                                            <div class="flex items-center gap-4">
+                                                <div class="glass p-3.5 rounded-2xl">
+                                                    <i data-lucide="wallet" class="w-7 h-7 text-orange-500"></i>
                                                 </div>
-                                                <div class="flex gap-2">
-                                                    <button onclick="showQRCode('${wallet.address}')" class="glass p-3 rounded-xl hover:bg-white/10 transition-all" title="Show QR Code">
-                                                        <i data-lucide="qr-code" class="w-5 h-5 text-secondary"></i>
-                                                    </button>
-                                                    <button onclick="exportToCSV(${walletIdx})" class="glass p-3 rounded-xl hover:bg-white/10 transition-all" title="Export CSV">
-                                                        <i data-lucide="download" class="w-5 h-5 text-secondary"></i>
-                                                    </button>
-                                                    <button onclick="removeAddress(${walletIdx})" class="glass p-3 rounded-xl hover:bg-white/10 transition-all">
-                                                        <i data-lucide="x" class="w-5 h-5 text-secondary"></i>
-                                                    </button>
+                                                <div>
+                                                    <p class="text-xs text-tertiary mb-2 uppercase tracking-wider font-semibold">Wallet Address</p>
+                                                    <p class="text-sm font-mono text-secondary font-medium">${wallet.address.slice(0, 16)}...${wallet.address.slice(-12)}</p>
                                                 </div>
                                             </div>
+                                            <div class="flex gap-2">
+                                                <button onclick="showQRCode('${wallet.address}')" class="glass p-3 rounded-xl hover:bg-white/10 transition-all" title="Show QR Code">
+                                                    <i data-lucide="qr-code" class="w-5 h-5 text-secondary"></i>
+                                                </button>
+                                                <button onclick="exportToCSV(${walletIdx})" class="glass p-3 rounded-xl hover:bg-white/10 transition-all" title="Export CSV">
+                                                    <i data-lucide="download" class="w-5 h-5 text-secondary"></i>
+                                                </button>
+                                                <button onclick="removeAddress(${walletIdx})" class="glass p-3 rounded-xl hover:bg-white/10 transition-all">
+                                                    <i data-lucide="x" class="w-5 h-5 text-secondary"></i>
+                                                </button>
+                                            </div>
+                                        </div>
 
-                                            <!-- Balance Card -->
-                                            <div class="glass-orange rounded-3xl p-8 mb-8 glow-orange">
-                                                <div class="flex items-center justify-between mb-6">
-                                                    <div class="flex items-center gap-3">
-                                                        <div class="glass-light p-3 rounded-xl">
-                                                            <i data-lucide="bitcoin" class="w-6 h-6 text-orange-500"></i>
-                                                        </div>
-                                                        <span class="text-secondary text-sm font-bold tracking-wider uppercase">Total Balance</span>
+                                        <!-- Balance Card -->
+                                        <div class="glass-orange rounded-3xl p-8 mb-8 glow-orange">
+                                            <div class="flex items-center justify-between mb-6">
+                                                <div class="flex items-center gap-3">
+                                                    <div class="glass-light p-3 rounded-xl">
+                                                        <i data-lucide="bitcoin" class="w-6 h-6 text-orange-500"></i>
                                                     </div>
+                                                    <span class="text-secondary text-sm font-bold tracking-wider uppercase">Total Balance</span>
                                                 </div>
-                                                <div class="mb-3">
-                                                    <span class="text-6xl font-bold text-primary text-shadow">
-                                                        ${formatBTC(wallet.balance)}
-                                                    </span>
-                                                    <span class="text-2xl text-orange-500 font-bold ml-2">BTC</span>
-                                                </div>
-                                                <p class="text-secondary text-sm font-medium mb-1">${formatSatoshis(wallet.balance)} satoshis<function_calls>
-    <invoke name="artifacts">
-    <parameter name="command">update</parameter>
-    <parameter name="id">btc_wallet_html</parameter>
-    <parameter name="old_str">                                            <p class="text-secondary text-sm font-medium mb-1">${formatSatoshis(wallet.balance)} satoshis</parameter>
-    <parameter name="new_str">                                            <p class="text-secondary text-sm font-medium mb-1">${formatSatoshis(wallet.balance)} satoshis</p>
-    <p class="text-orange-400 text-xl font-bold">${formatFiat(wallet.balance)}</p>
-    <!-- Historical Chart -->
+                                            </div>
+                                            <div class="mb-3">
+                                                <span class="text-6xl font-bold text-primary text-shadow">
+                                                    ${formatBTC(wallet.balance)}
+                                                </span>
+                                                <span class="text-2xl text-orange-500 font-bold ml-2">BTC</span>
+                                            </div>
+                                            <p class="text-secondary text-sm font-medium mb-2">${formatSatoshis(wallet.balance)} satoshis</p>
+                                            <p class="text-orange-400 text-xl font-bold">${formatFiat(wallet.balance)}</p>
+                                        </div>
+
+                                        <!-- Historical Chart -->
                                         <div class="glass rounded-2xl p-6 mb-8">
                                             <h3 class="text-sm font-bold text-secondary uppercase tracking-wide mb-4">Balance History</h3>
                                             <div style="height: 250px;">
@@ -736,7 +730,6 @@
                                                 <p class="text-red-400 text-sm font-bold">${formatFiat(wallet.totalSent)}</p>
                                             </div>
                                         </div>
-
                                         <!-- Transactions -->
                                         <div class="glass rounded-2xl p-6">
                                             <div class="flex items-center justify-between mb-6">
@@ -774,7 +767,7 @@
                                                                 <div class="flex items-center gap-4 flex-1">
                                                                     <div class="glass-light p-2.5 rounded-lg ${isReceived ? 'bg-green-500/10' : 'bg-red-500/10'}">
                                                                         <i data-lucide="${isReceived ? 'arrow-down-left' : 'arrow-up-right'}" 
-                                                                        class="w-4 h-4 ${isReceived ? 'text-green-400' : 'text-red-400'}"></i>
+                                                                           class="w-4 h-4 ${isReceived ? 'text-green-400' : 'text-red-400'}"></i>
                                                                     </div>
                                                                     <div class="flex-1 min-w-0">
                                                                         <p class="text-secondary text-xs font-mono font-medium mb-1 truncate">
@@ -797,10 +790,11 @@
                                                     `;
                                                 }).join('')}
                                             </div>
-                                        </div>
+                                                                                </div>
                                     </div>
                                 `).join('')}
                             </div>
+
 
                             <!-- Clear Button -->
                             <div class="flex justify-center mb-12">
@@ -883,8 +877,6 @@
         fetchBTCPrice();
         setInterval(fetchBTCPrice, 60000); // Update price every minute
         render();
-    </script></body>
-    </html></parameter>
-
-
-
+    </script>
+</body>
+</html>
